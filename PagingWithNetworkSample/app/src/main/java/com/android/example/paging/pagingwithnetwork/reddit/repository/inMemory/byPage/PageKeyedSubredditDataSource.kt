@@ -17,13 +17,18 @@
 package com.android.example.paging.pagingwithnetwork.reddit.repository.inMemory.byPage
 
 import androidx.lifecycle.MutableLiveData
+import androidx.paging.CoroutinePageKeyedDataSource
 import androidx.paging.PageKeyedDataSource
 import com.android.example.paging.pagingwithnetwork.reddit.api.RedditApi
 import com.android.example.paging.pagingwithnetwork.reddit.repository.NetworkState
 import com.android.example.paging.pagingwithnetwork.reddit.vo.RedditPost
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import retrofit2.Call
+import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
+import java.lang.Exception
 import java.util.concurrent.Executor
 
 /**
@@ -33,12 +38,17 @@ import java.util.concurrent.Executor
  */
 class PageKeyedSubredditDataSource(
         private val redditApi: RedditApi,
-        private val subredditName: String,
-        private val retryExecutor: Executor) : PageKeyedDataSource<String, RedditPost>() {
+        private val subredditName: String) : CoroutinePageKeyedDataSource<String, RedditPost>() {
 
     // keep a function reference for the retry event
     private var retry: (() -> Any)? = null
 
+    private val retrySignal = Channel<Boolean>()
+    private fun retryImpl() {
+        coroutineScope.launch {
+            retrySignal.send(true)
+        }
+    }
     /**
      * There is no sync on the state because paging will always call loadInitial first then wait
      * for it to return some success value before calling loadAfter.
@@ -51,78 +61,65 @@ class PageKeyedSubredditDataSource(
         val prevRetry = retry
         retry = null
         prevRetry?.let {
-            retryExecutor.execute {
-                it.invoke()
-            }
+            it.invoke()
         }
     }
 
-    override fun loadBefore(
-            params: LoadParams<String>,
-            callback: LoadCallback<String, RedditPost>) {
-        // ignored, since we only ever append to our initial load
-    }
-
-    override fun loadAfter(params: LoadParams<String>, callback: LoadCallback<String, RedditPost>) {
-        networkState.postValue(NetworkState.LOADING)
-        redditApi.getTopAfter(subreddit = subredditName,
-                after = params.key,
-                limit = params.requestedLoadSize).enqueue(
-                object : retrofit2.Callback<RedditApi.ListingResponse> {
-                    override fun onFailure(call: Call<RedditApi.ListingResponse>, t: Throwable) {
-                        retry = {
-                            loadAfter(params, callback)
-                        }
-                        networkState.postValue(NetworkState.error(t.message ?: "unknown err"))
-                    }
-
-                    override fun onResponse(
-                            call: Call<RedditApi.ListingResponse>,
-                            response: Response<RedditApi.ListingResponse>) {
-                        if (response.isSuccessful) {
-                            val data = response.body()?.data
-                            val items = data?.children?.map { it.data } ?: emptyList()
-                            retry = null
-                            callback.onResult(items, data?.after)
-                            networkState.postValue(NetworkState.LOADED)
-                        } else {
-                            retry = {
-                                loadAfter(params, callback)
-                            }
-                            networkState.postValue(
-                                    NetworkState.error("error code: ${response.code()}"))
-                        }
-                    }
+    override suspend fun loadAfter(params: LoadParams<String>): LoadResult<String, RedditPost> {
+        do {
+            try {
+                networkState.postValue(NetworkState.LOADING)
+                val response = redditApi.getTopAfter_suspend(subredditName, after = params.key, limit = params.requestedLoadSize)
+                val data = response?.data
+                val items = data?.children?.map { it.data } ?: emptyList()
+                retry = null
+                networkState.postValue(NetworkState.LOADED)
+                return LoadResult.Success(items, data?.after)
+            } catch (e: HttpException) {
+                retry = {
+                    retryImpl()
                 }
-        )
+                networkState.postValue(NetworkState.error("error code: ${e.code()}"))
+            }
+            catch (e: Exception) {
+                retry = {
+                    retryImpl()
+                }
+                networkState.postValue(NetworkState.error(e.message ?: "unknown err"))
+            }
+            retrySignal.receive()
+        } while (true)
     }
 
-    override fun loadInitial(
-            params: LoadInitialParams<String>,
-            callback: LoadInitialCallback<String, RedditPost>) {
-        val request = redditApi.getTop(
-                subreddit = subredditName,
-                limit = params.requestedLoadSize
-        )
-        networkState.postValue(NetworkState.LOADING)
-        initialLoad.postValue(NetworkState.LOADING)
+    override suspend fun loadBefore(params: LoadParams<String>): LoadResult<String, RedditPost> {
+        return LoadResult.None
+    }
 
-        // triggered by a refresh, we better execute sync
-        try {
-            val response = request.execute()
-            val data = response.body()?.data
-            val items = data?.children?.map { it.data } ?: emptyList()
-            retry = null
-            networkState.postValue(NetworkState.LOADED)
-            initialLoad.postValue(NetworkState.LOADED)
-            callback.onResult(items, data?.before, data?.after)
-        } catch (ioException: IOException) {
-            retry = {
-                loadInitial(params, callback)
+    override suspend fun loadInitial(params: LoadInitialParams<String>): InitialResult<String, RedditPost> {
+        do {
+            networkState.postValue(NetworkState.LOADING)
+            initialLoad.postValue(NetworkState.LOADING)
+            // triggered by a refresh, we better execute sync
+            try {
+                val response = redditApi.getTop_suspend(
+                        subreddit = subredditName,
+                        limit = params.requestedLoadSize
+                )
+                val data = response?.data
+                val items = data?.children?.map { it.data } ?: emptyList()
+                retry = null
+                networkState.postValue(NetworkState.LOADED)
+                initialLoad.postValue(NetworkState.LOADED)
+                return InitialResult.Success(items, data?.before, data?.after)
+            } catch (e: Exception) {
+                retry = {
+                    retryImpl()
+                }
+                val error = NetworkState.error(e.message ?: "unknown error")
+                networkState.postValue(error)
+                initialLoad.postValue(error)
             }
-            val error = NetworkState.error(ioException.message ?: "unknown error")
-            networkState.postValue(error)
-            initialLoad.postValue(error)
-        }
+            retrySignal.receive()
+        } while (true)
     }
 }

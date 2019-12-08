@@ -37,6 +37,11 @@ interface RedditApi {
             @Path("subreddit") subreddit: String,
             @Query("limit") limit: Int): Call<ListingResponse>
 
+    @GET("/r/{subreddit}/hot.json")
+    suspend fun getTop_suspend(
+            @Path("subreddit") subreddit: String,
+            @Query("limit") limit: Int): ListingResponse
+
     // for after/before param, either get from RedditDataResponse.after/before,
     // or pass RedditNewsDataResponse.name (though this is technically incorrect)
     @GET("/r/{subreddit}/hot.json")
@@ -44,6 +49,12 @@ interface RedditApi {
             @Path("subreddit") subreddit: String,
             @Query("after") after: String,
             @Query("limit") limit: Int): Call<ListingResponse>
+
+    @GET("/r/{subreddit}/hot.json")
+    suspend fun getTopAfter_suspend(
+            @Path("subreddit") subreddit: String,
+            @Query("after") after: String,
+            @Query("limit") limit: Int): ListingResponse
 
     @GET("/r/{subreddit}/hot.json")
     fun getTopBefore(

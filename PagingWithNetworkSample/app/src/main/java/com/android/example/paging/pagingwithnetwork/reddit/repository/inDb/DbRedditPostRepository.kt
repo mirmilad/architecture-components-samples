@@ -132,7 +132,8 @@ class DbRedditPostRepository(
                 refresh = {
                     refreshTrigger.value = null
                 },
-                refreshState = refreshState
+                refreshState = refreshState,
+                cancelCoroutines = {}
         )
     }
 }

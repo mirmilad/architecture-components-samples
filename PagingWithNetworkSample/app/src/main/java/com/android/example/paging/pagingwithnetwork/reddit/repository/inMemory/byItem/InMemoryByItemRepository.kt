@@ -33,22 +33,19 @@ import java.util.concurrent.Executor
  * and uses the Item's name as the key to discover prev/next pages.
  */
 class InMemoryByItemRepository(
-        private val redditApi: RedditApi,
-        private val networkExecutor: Executor) : RedditPostRepository {
+        private val redditApi: RedditApi) : RedditPostRepository {
     @MainThread
     override fun postsOfSubreddit(subReddit: String, pageSize: Int): Listing<RedditPost> {
-        val sourceFactory = SubRedditDataSourceFactory(redditApi, subReddit, networkExecutor)
+        val sourceFactory = SubRedditDataSourceFactory(redditApi, subReddit)
 
         // We use toLiveData Kotlin ext. function here, you could also use LivePagedListBuilder
-        val livePagedList = sourceFactory.toLiveData(
+        val livePagedList = sourceFactory.toCoroutineLiveData(
                 // we use Config Kotlin ext. function here, could also use PagedList.Config.Builder
                 config = Config(
                         pageSize = pageSize,
                         enablePlaceholders = false,
-                        initialLoadSizeHint = pageSize * 2),
-                // provide custom executor for network requests, otherwise it will default to
-                // Arch Components' IO pool which is also used for disk access
-                fetchExecutor = networkExecutor)
+                        initialLoadSizeHint = pageSize * 2)
+                )
 
         val refreshState = Transformations.switchMap(sourceFactory.sourceLiveData) {
             it.initialLoad
@@ -64,7 +61,10 @@ class InMemoryByItemRepository(
                 refresh = {
                     sourceFactory.sourceLiveData.value?.invalidate()
                 },
-                refreshState = refreshState
+                refreshState = refreshState,
+                cancelCoroutines = {
+                    sourceFactory.sourceLiveData.value?.cancelCoroutines()
+                }
         )
     }
 }

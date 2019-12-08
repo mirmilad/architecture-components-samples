@@ -1,6 +1,6 @@
-# Paging With Network Sample
+# Paging-Coroutine With Network Sample
 
-This sample demonstrates how to use the Paging library with a backend API (in this
+This sample demonstrates how to use the [Paging-Coroutine](https://github.com/mirmilad/paging-coroutine) library with a backend API (in this
 case [Reddit API][8]).
 
 There are 3 variations of the demo, which you can select in the `MainActivity` class.
@@ -27,8 +27,8 @@ set up a Repository that will directly page in from the network and will use the
 the previous item to find the request parameters for the next page.
 
 [ItemKeyedSubredditDataSource][5]: The data source that uses the `key` in items
-(`name` in Reddit API) to find the next page. It extends from the `ItemKeyedDataSource` class
-in the Paging Library.
+(`name` in Reddit API) to find the next page. It extends from the `CoroutineItemKeyedDataSource` class
+in the Paging-Coroutine Library.
 
 ## Paging Using Next Tokens From The Previous Query
 This sample, implemented in the [InMemoryByPageKeyRepository][6] class, demonstrates how to
@@ -38,8 +38,8 @@ the intended use of the Reddit API but this sample still provides
 before/after links)
 
 [PageKeyedSubredditDataSource][7]: The data source that uses the `after` and `before` fields
-in the API request response. It extends from the `PageKeyedDataSource` class
-in the Paging Library.
+in the API request response. It extends from the `CoroutinePageKeyedDataSource` class
+in the Paging-Coroutine Library.
 
 
 ### Libraries

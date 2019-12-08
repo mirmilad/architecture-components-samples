@@ -30,18 +30,17 @@ import java.util.concurrent.Executor
  * Repository implementation that returns a Listing that loads data directly from network by using
  * the previous / next page keys returned in the query.
  */
-class InMemoryByPageKeyRepository(private val redditApi: RedditApi,
-                                  private val networkExecutor: Executor) : RedditPostRepository {
+class InMemoryByPageKeyRepository(private val redditApi: RedditApi) : RedditPostRepository {
     @MainThread
     override fun postsOfSubreddit(subReddit: String, pageSize: Int): Listing<RedditPost> {
-        val sourceFactory = SubRedditDataSourceFactory(redditApi, subReddit, networkExecutor)
+        val sourceFactory = SubRedditDataSourceFactory(redditApi, subReddit)
 
         // We use toLiveData Kotlin extension function here, you could also use LivePagedListBuilder
-        val livePagedList = sourceFactory.toLiveData(
-                pageSize = pageSize,
+        val livePagedList = sourceFactory.toCoroutineLiveData(
+                pageSize = pageSize
                 // provide custom executor for network requests, otherwise it will default to
                 // Arch Components' IO pool which is also used for disk access
-                fetchExecutor = networkExecutor)
+                )
 
         val refreshState = Transformations.switchMap(sourceFactory.sourceLiveData) {
             it.initialLoad
@@ -57,7 +56,10 @@ class InMemoryByPageKeyRepository(private val redditApi: RedditApi,
                 refresh = {
                     sourceFactory.sourceLiveData.value?.invalidate()
                 },
-                refreshState = refreshState
+                refreshState = refreshState,
+                cancelCoroutines = {
+                    sourceFactory.sourceLiveData.value?.cancelCoroutines()
+                }
         )
     }
 }

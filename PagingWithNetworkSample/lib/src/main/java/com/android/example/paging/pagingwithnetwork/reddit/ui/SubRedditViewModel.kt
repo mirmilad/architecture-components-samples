@@ -49,4 +49,9 @@ class SubRedditViewModel(private val repository: RedditPostRepository) : ViewMod
     }
 
     fun currentSubreddit(): String? = subredditName.value
+
+    override fun onCleared() {
+        super.onCleared()
+        repoResult?.value?.cancelCoroutines?.invoke()
+    }
 }

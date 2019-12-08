@@ -33,4 +33,6 @@ data class Listing<T>(
         // refreshes the whole data and fetches it from scratch.
         val refresh: () -> Unit,
         // retries any failed requests.
-        val retry: () -> Unit)
+        val retry: () -> Unit,
+        // cancel all coroutines.
+        val cancelCoroutines: () -> Unit)
